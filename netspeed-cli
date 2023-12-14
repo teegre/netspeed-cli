@@ -1,0 +1,9 @@
+#! /usr/bin/env bash
+clear
+tput civis
+trap 'tput reset; echo "done."; exit' INT
+while :; do
+  tput cup 0 0
+  netspeed
+  sleep 1
+done

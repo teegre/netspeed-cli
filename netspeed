@@ -1,0 +1,67 @@
+#! /usr/bin/env bash
+
+declare -A NET
+declare -ra humansztbl=("  B" " kB" " MB" " GB")
+
+while read -r; do
+  [[ $REPLY =~ ^default ]] && INTERFACES+=("$(echo "${REPLY}" | cut -d' ' -f 5)")
+done < <(ip route)
+
+clrtoeol() { printf '\x1b[K'; }
+clrtoeos() { printf '\x1b[0J'; }
+
+humansz() {
+  local n="$1"
+  for ((i=0;i<"${#humansztbl[@]}" && "$n">=1024;i++)) {
+    ((n/=1024))
+  } 
+  echo "$i"
+}
+
+updatenetspeed() {
+  local rxbytes="$1"
+  local txbytes="$2"
+  local irx itx
+  local srx stx
+  ((irx=$(humansz rxbytes)))
+  ((itx=$(humansz txbytes)))
+  ((rx=(1<<(10*irx))))
+  ((tx=(1<<(10*itx))))
+  srx="$(echo "scale=2; $rxbytes/$rx" | bc -l)"
+  stx="$(echo "scale=2; $txbytes/$tx" | bc -l)"
+  printf '⬇:%7s%1s/s ⬆:%7s%1s/s' "$stx" "${humansztbl[$itx]}" "$srx" "${humansztbl[$irx]}"
+  clrtoeol
+}
+
+netspeedread() {
+  [[ $1 ]] || return 1
+  local I="$1"
+  read -r rxbytes < "/sys/class/net/$I/statistics/tx_bytes"
+  read -r txbytes < "/sys/class/net/$I/statistics/rx_bytes"
+  local time
+  time="$(date +%s)"
+  ! [[ -a "$CFG_PATH" ]] && echo "$time;$rxbytes;$txbytes" > "$CFG_PATH"
+  mapfile -d ';' -t old < "$CFG_PATH"
+  echo "$time;$rxbytes;$txbytes" > "$CFG_PATH"
+  ((time_diff=time - old[0]))
+  [[ "$time_diff" -gt 0 ]] || exit
+  ((rx_diff=rxbytes-old[1]))
+  ((tx_diff=txbytes-old[2]))
+  ((rx_rate=rx_diff/time_diff))
+  ((tx_rate=tx_diff/time_diff))
+  updatenetspeed "$rx_rate" "$tx_rate"
+}
+
+while read -r; do
+  for I in ${INTERFACES[@]}; do
+    [[ $REPLY =~ ^(.+):.+:.+:"${I}"$ ]] && NET["$I"]="${BASH_REMATCH[1]}"
+  done
+done < <(nmcli -t connection show --active)
+
+for I in ${INTERFACES[@]}; do
+  CFG_PATH="$HOME/.config/netspeed.$I"
+  printf '%15s ' "${NET["$I"]}"
+  netspeedread "$I" || updatenetspeed 0 0
+  clrtoeos
+  echo
+done
