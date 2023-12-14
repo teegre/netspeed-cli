@@ -1,13 +1,10 @@
 #! /usr/bin/env bash
 
-declare -A NET
+declare -A CXN # Connection names.
+declare -i NCX # Connection count.
+declare CFG_PATH
 declare -ra humansztbl=("  B" " kB" " MB" " GB")
 
-while read -r; do
-  [[ $REPLY =~ ^default ]] && INTERFACES+=("$(echo "${REPLY}" | cut -d' ' -f 5)")
-done < <(ip route)
-
-clrtoeol() { printf '\x1b[K'; }
 clrtoeos() { printf '\x1b[0J'; }
 
 humansz() {
@@ -21,6 +18,7 @@ humansz() {
 updatenetspeed() {
   local rxbytes="$1"
   local txbytes="$2"
+  local ncx="$3"
   local irx itx
   local srx stx
   ((irx=$(humansz rxbytes)))
@@ -29,39 +27,45 @@ updatenetspeed() {
   ((tx=(1<<(10*itx))))
   srx="$(echo "scale=2; $rxbytes/$rx" | bc -l)"
   stx="$(echo "scale=2; $txbytes/$tx" | bc -l)"
-  printf '⬇:%7s%1s/s ⬆:%7s%1s/s' "$stx" "${humansztbl[$itx]}" "$srx" "${humansztbl[$irx]}"
-  clrtoeol
+  printf '⬇:%7s%1s/s ⬆:%7s%1s/s\n' "$stx" "${humansztbl[$itx]}" "$srx" "${humansztbl[$irx]}"
+  ((ncx==NCX)) || clrtoeos
 }
 
 netspeedread() {
   [[ $1 ]] || return 1
   local I="$1"
+  local rxbytes txbytes ncx rx_rate tx_rate tx_diff rx_diff
   read -r rxbytes < "/sys/class/net/$I/statistics/tx_bytes"
   read -r txbytes < "/sys/class/net/$I/statistics/rx_bytes"
   local time
   time="$(date +%s)"
-  ! [[ -a "$CFG_PATH" ]] && echo "$time;$rxbytes;$txbytes" > "$CFG_PATH"
+  ! [[ -a "$CFG_PATH" ]] && echo "$time;$rxbytes;$txbytes;$NCX" > "$CFG_PATH"
   mapfile -d ';' -t old < "$CFG_PATH"
-  echo "$time;$rxbytes;$txbytes" > "$CFG_PATH"
-  ((time_diff=time - old[0]))
+  echo "$time;$rxbytes;$txbytes;$NCX" > "$CFG_PATH"
+  ((time_diff=time-old[0]))
   [[ "$time_diff" -gt 0 ]] || exit
   ((rx_diff=rxbytes-old[1]))
   ((tx_diff=txbytes-old[2]))
   ((rx_rate=rx_diff/time_diff))
   ((tx_rate=tx_diff/time_diff))
-  updatenetspeed "$rx_rate" "$tx_rate"
+  ((ncx=old[3]))
+  updatenetspeed "$rx_rate" "$tx_rate" "$ncx"
 }
 
 while read -r; do
+  [[ $REPLY =~ ^default ]] && INTERFACES+=("$(echo "${REPLY}" | cut -d' ' -f 5)")
+done < <(ip route)
+
+while read -r; do
   for I in ${INTERFACES[@]}; do
-    [[ $REPLY =~ ^(.+):.+:.+:"${I}"$ ]] && NET["$I"]="${BASH_REMATCH[1]}"
+    [[ $REPLY =~ ^(.+):.+:.+:"${I}"$ ]] && CXN["$I"]="${BASH_REMATCH[1]}"
   done
 done < <(nmcli -t connection show --active)
 
+((NCX=${#CXN[@]}))
+
 for I in ${INTERFACES[@]}; do
-  CFG_PATH="$HOME/.config/netspeed.$I"
-  printf '%15s ' "${NET["$I"]}"
+  CFG_PATH="/tmp/netspeed.$I"
+  printf '%15s ' "${CXN["$I"]}"
   netspeedread "$I" || updatenetspeed 0 0
-  clrtoeos
-  echo
 done
