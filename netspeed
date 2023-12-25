@@ -27,7 +27,7 @@ updatenetspeed() {
   ((tx=(1<<(10*itx))))
   srx="$(echo "scale=2; $rxbytes/$rx" | bc -l)"
   stx="$(echo "scale=2; $txbytes/$tx" | bc -l)"
-  printf '⬇:%7s%1s/s ⬆:%7s%1s/s\n' "$stx" "${humansztbl[$itx]}" "$srx" "${humansztbl[$irx]}"
+  printf '↓%7s%1s/s ↑%7s%1s/s\n' "$stx" "${humansztbl[$itx]}" "$srx" "${humansztbl[$irx]}"
   ((ncx==NCX)) || clrtoeos
 }
 

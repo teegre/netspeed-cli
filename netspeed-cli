@@ -1,9 +1,16 @@
 #! /usr/bin/env bash
+hidecursor() { printf "\x1b[?25l"; }
+showcursor() { printf "\x1b[?25h"; }
+locate() { printf "\x1b[%i;%iH" "$1" "$2"; }
+
+hidecursor
+stty -echo
 clear
-tput civis
-trap 'tput reset; echo "done."; exit' INT
+
+trap 'showcursor; stty echo; echo -e "\rdone."; exit' INT
+
 while :; do
-  tput cup 0 0
+  locate 0 0
   netspeed
   sleep 1
 done

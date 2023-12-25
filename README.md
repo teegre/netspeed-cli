@@ -1,7 +1,7 @@
 # netspeed-cli
 
 ## Description
-Show download/upload speed of active connections.
+Display an approximation of download/upload speed of active connections.
 
 ## Dependencies
-coreutils, iproute, networkmanager, bc, ncurses.
+coreutils, iproute, networkmanager, bc
